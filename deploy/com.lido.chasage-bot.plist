@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.lido.chasage-bot</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<!-- -s: prevent system sleep while on AC power, only while the bot runs. -->
+		<string>/usr/bin/caffeinate</string>
+		<string>-s</string>
+		<string>__BIN__</string>
+		<string>-config</string>
+		<string>__CONFIG__</string>
+	</array>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>PATH</key>
+		<string>__PATH__</string>
+		<!-- CocoaPods fails under launchd without a UTF-8 locale. -->
+		<key>LANG</key>
+		<string>en_US.UTF-8</string>
+		<key>LC_ALL</key>
+		<string>en_US.UTF-8</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<!-- LaunchAgent in the login session so codesign can use the login keychain. -->
+	<key>ProcessType</key>
+	<string>Interactive</string>
+
+	<key>StandardOutPath</key>
+	<string>__LOGDIR__/daemon.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOGDIR__/daemon.log</string>
+</dict>
+</plist>

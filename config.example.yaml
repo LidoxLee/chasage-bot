@@ -1,0 +1,40 @@
+# 複製到 ~/.config/chasage-bot/config.yaml（make config 會幫你做），權限 600。
+
+# @BotFather 給的 token。
+telegram_token: "123456:ABC..."
+
+# 你的 Telegram chat id。先留 0 啟動 bot，傳任何訊息給 bot，它會回覆你的 chat id。
+allowed_chat_id: 0
+
+# 以下都有預設值，通常不用改。
+# workdir: ~/chasage-bot                                   # 專用 clone、任務 worktree、release clone
+# state_path: ~/Library/Application Support/chasage-bot/state.json
+# log_dir: ~/Library/Logs/chasage-bot
+# path: ""                                                 # 有填就取代子程序的 PATH
+
+# backend:
+#   slug: LidoxLee/chasage-backend
+#   dir: chasage-backend
+#   base: main
+# app:
+#   slug: LidoxLee/chasage
+#   dir: chasage-app
+#   base: main
+# deploy_workflow: ecr.yml
+# checks_timeout: 30m
+# deploy_timeout: 30m
+
+agent:
+  bin: agent            # Cursor CLI，安裝在 ~/.local/bin
+  model: ""             # 留空用 Cursor 預設模型
+  # 無人值守必須自動允許指令（--force）並信任任務資料夾（--trust）。
+  # 如果 agent 的 go / flutter 指令因沙箱連不上網路，再加上 "--sandbox", "disabled"。
+  extra_args: ["--force", "--trust"]
+  timeout: 60m
+
+release:
+  asc_key_id: "XXXXXXXXXX"
+  asc_issuer_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  # 下一次上傳用的 build number。必須大於 App Store Connect 上已有的最大值（pubspec 目前是 +2）。
+  build_number_start: 3
+  timeout: 60m

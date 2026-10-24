@@ -78,10 +78,32 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.applyDefaults(home)
-	if err := cfg.validate(); err != nil {
+	if err := cfg.validate(home); err != nil {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// ascKeyDirs mirrors where the app Makefile's upload-testflight target looks for AuthKey_<id>.p8.
+func ascKeyDirs(home string) []string {
+	dirs := []string{
+		filepath.Join(home, "private_keys"),
+		filepath.Join(home, ".private_keys"),
+		filepath.Join(home, ".appstoreconnect", "private_keys"),
+	}
+	if d := os.Getenv("API_PRIVATE_KEYS_DIR"); d != "" {
+		dirs = append([]string{d}, dirs...)
+	}
+	return dirs
+}
+
+func ascKeyExists(home, keyID string) bool {
+	for _, d := range ascKeyDirs(home) {
+		if _, err := os.Stat(filepath.Join(d, "AuthKey_"+keyID+".p8")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Config) applyDefaults(home string) {
@@ -111,7 +133,7 @@ func (c *Config) applyDefaults(home string) {
 	defDur(&c.Agent.Timeout, 60*time.Minute)
 	defDur(&c.Release.Timeout, 60*time.Minute)
 	if c.Agent.ExtraArgs == nil {
-		c.Agent.ExtraArgs = []string{"--force"}
+		c.Agent.ExtraArgs = []string{"--force", "--trust"}
 	}
 	if c.Release.BuildNumberStart == 0 {
 		c.Release.BuildNumberStart = 1
@@ -121,13 +143,19 @@ func (c *Config) applyDefaults(home string) {
 	c.LogDir = expandHome(c.LogDir, home)
 }
 
-func (c *Config) validate() error {
+func (c *Config) validate(home string) error {
 	var errs []error
 	if c.TelegramToken == "" {
 		errs = append(errs, errors.New("telegram_token is required"))
 	}
-	if c.AllowedChatID != 0 && (c.Release.ASCKeyID == "" || c.Release.ASCIssuerID == "") {
+	if c.AllowedChatID == 0 {
+		return errors.Join(errs...)
+	}
+	if c.Release.ASCKeyID == "" || c.Release.ASCIssuerID == "" {
 		errs = append(errs, errors.New("release.asc_key_id and release.asc_issuer_id are required"))
+	} else if !ascKeyExists(home, c.Release.ASCKeyID) {
+		errs = append(errs, fmt.Errorf("release.asc_key_id: AuthKey_%s.p8 not found in %s",
+			c.Release.ASCKeyID, strings.Join(ascKeyDirs(home), ", ")))
 	}
 	return errors.Join(errs...)
 }
