@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/agent"
 	"github.com/LidoxLee/chasage-bot/internal/config"
 	"github.com/LidoxLee/chasage-bot/internal/gh"
@@ -39,6 +40,8 @@ type Deps struct {
 	GH      gh.GH
 	Agent   agent.Agent
 	Release release.Releaser
+	// Activity, when set, receives each conversation's timeline for the dashboard.
+	Activity *activity.Hub
 }
 
 // turnJob is one user message for the agent.

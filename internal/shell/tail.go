@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"sync"
@@ -39,6 +40,32 @@ func (t *TailWriter) Tail(n int) string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return lastLines(string(t.buf), n)
+}
+
+// lineWriter calls fn for every complete line written to it.
+type lineWriter struct {
+	buf []byte
+	fn  func(string)
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		w.fn(string(w.buf[:i]))
+		w.buf = w.buf[i+1:]
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) flush() {
+	if len(w.buf) > 0 {
+		w.fn(string(w.buf))
+		w.buf = nil
+	}
 }
 
 // Lines splits s into non-empty trimmed lines.

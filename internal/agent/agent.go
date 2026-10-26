@@ -11,6 +11,7 @@ import (
 
 	"github.com/LidoxLee/chasage-bot/internal/shell"
 	"github.com/LidoxLee/chasage-bot/internal/task"
+	"github.com/LidoxLee/chasage-bot/internal/telegram"
 )
 
 // Result is the outcome of one agent turn.
@@ -19,7 +20,7 @@ type Result struct {
 	SessionID string
 }
 
-// Agent runs `agent -p --output-format json`.
+// Agent runs `agent -p --output-format stream-json`.
 type Agent struct {
 	R         shell.Runner
 	Bin       string
@@ -28,9 +29,11 @@ type Agent struct {
 }
 
 // Run sends prompt in dir using mode. A non-empty sessionID resumes that conversation;
-// the same session can be resumed under a different mode.
-func (a Agent) Run(ctx context.Context, log io.Writer, dir, sessionID string, mode task.Mode, prompt string) (Result, error) {
-	args := []string{"-p", "--output-format", "json"}
+// the same session can be resumed under a different mode. onEvent, if set, receives each
+// step (tool calls, assistant text) as it happens.
+func (a Agent) Run(ctx context.Context, log io.Writer, dir, sessionID string, mode task.Mode, prompt string,
+	onEvent func(Event)) (Result, error) {
+	args := []string{"-p", "--output-format", "stream-json"}
 	if mode == task.Ask || mode == task.Plan {
 		args = append(args, "--mode", string(mode))
 	}
@@ -42,7 +45,19 @@ func (a Agent) Run(ctx context.Context, log io.Writer, dir, sessionID string, mo
 		args = append(args, "--resume", sessionID)
 	}
 	args = append(args, prompt)
-	out, err := a.R.Run(ctx, log, shell.Cmd{Dir: dir, Name: a.Bin, Args: args})
+	onLine := func(line string) {
+		ev, ok := ParseEvent(line)
+		if !ok || ev.Kind == KindResult {
+			return
+		}
+		if log != nil {
+			fmt.Fprintf(log, "[%s] %s\n", ev.Kind, telegram.Truncate(ev.Text, 500))
+		}
+		if onEvent != nil {
+			onEvent(ev)
+		}
+	}
+	out, err := a.R.Run(ctx, log, shell.Cmd{Dir: dir, Name: a.Bin, Args: args, OnLine: onLine})
 	res, perr := ParseOutput(out)
 	if res.SessionID == "" {
 		res.SessionID = sessionID
@@ -60,15 +75,22 @@ type output struct {
 	SessionID string `json:"session_id"`
 }
 
-// ParseOutput reads the final JSON object printed by the CLI.
+// ParseOutput reads the final result object printed by the CLI.
 func ParseOutput(out string) (Result, error) {
 	lines := shell.Lines(out)
+	sessionID := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		if !strings.HasPrefix(lines[i], "{") {
 			continue
 		}
 		var o output
 		if err := json.Unmarshal([]byte(lines[i]), &o); err != nil {
+			continue
+		}
+		if sessionID == "" {
+			sessionID = o.SessionID
+		}
+		if o.Type != KindResult {
 			continue
 		}
 		res := Result{Text: strings.TrimSpace(o.Result), SessionID: o.SessionID}
@@ -80,5 +102,5 @@ func ParseOutput(out string) (Result, error) {
 	if out == "" {
 		return Result{}, errors.New("agent 沒有任何輸出")
 	}
-	return Result{Text: out}, errors.New("無法解析 agent 的輸出")
+	return Result{Text: out, SessionID: sessionID}, errors.New("無法解析 agent 的輸出")
 }

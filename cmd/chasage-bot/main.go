@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/agent"
 	"github.com/LidoxLee/chasage-bot/internal/bot"
 	"github.com/LidoxLee/chasage-bot/internal/config"
@@ -22,6 +23,7 @@ import (
 	"github.com/LidoxLee/chasage-bot/internal/shell"
 	"github.com/LidoxLee/chasage-bot/internal/store"
 	"github.com/LidoxLee/chasage-bot/internal/telegram"
+	"github.com/LidoxLee/chasage-bot/internal/web"
 )
 
 func main() {
@@ -57,12 +59,22 @@ func run(cfgPath string) error {
 	runner := shell.Exec{}
 	git := gitx.Git{R: runner}
 	tg := telegram.New(cfg.TelegramToken)
+	hub := activity.New(500)
+	if cfg.DashboardAddr != "off" {
+		dash := &web.Server{Store: st, Hub: hub, LogDir: cfg.LogDir}
+		go func() {
+			if err := web.Serve(ctx, cfg.DashboardAddr, dash.Handler()); err != nil {
+				slog.Error("dashboard", "addr", cfg.DashboardAddr, "err", err)
+			}
+		}()
+	}
 	b := bot.New(bot.Deps{
-		Cfg:   cfg,
-		Store: st,
-		TG:    tg,
-		Out:   bot.ChatNotifier{TG: tg, ChatID: cfg.AllowedChatID},
-		Git:   git,
+		Activity: hub,
+		Cfg:      cfg,
+		Store:    st,
+		TG:       tg,
+		Out:      bot.ChatNotifier{TG: tg, ChatID: cfg.AllowedChatID},
+		Git:      git,
 		GH: gh.GH{
 			R:                   runner,
 			Dir:                 cfg.Workdir,
@@ -80,6 +92,7 @@ func run(cfgPath string) error {
 			ASCIssuerID: cfg.Release.ASCIssuerID,
 		},
 	})
-	slog.Info("chasage-bot started", "config", cfgPath, "workdir", cfg.Workdir, "setup_mode", cfg.AllowedChatID == 0)
+	slog.Info("chasage-bot started", "config", cfgPath, "workdir", cfg.Workdir, "setup_mode", cfg.AllowedChatID == 0,
+		"dashboard", "http://"+cfg.DashboardAddr)
 	return b.Run(ctx)
 }

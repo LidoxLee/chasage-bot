@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chasage-bot</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2025; --muted: #6b7280; --border: #e3e5e8;
+    --accent: #2563eb; --user: #eef4ff; --bot: #f3f4f6; --tool: #6b7280; --err: #b91c1c; --ok: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111316; --panel: #1a1d21; --text: #e6e7e9; --muted: #9aa0a8; --border: #2b2f35;
+      --accent: #60a5fa; --user: #1d2a44; --bot: #23272d; --tool: #9aa0a8; --err: #f87171; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang TC", sans-serif;
+         background: var(--bg); color: var(--text); height: 100vh; display: flex; }
+  aside { width: 320px; border-right: 1px solid var(--border); background: var(--panel);
+          display: flex; flex-direction: column; }
+  aside header { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  aside h1 { font-size: 16px; margin: 0; }
+  aside .sub { color: var(--muted); font-size: 12px; }
+  #list { overflow-y: auto; flex: 1; }
+  .conv { padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .conv:hover { background: var(--bg); }
+  .conv.selected { background: var(--user); }
+  .conv .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .meta { color: var(--muted); font-size: 12px; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .badge { border: 1px solid var(--border); border-radius: 999px; padding: 0 7px; font-size: 11px; }
+  .badge.active { border-color: var(--accent); color: var(--accent); }
+  .badge.busy { border-color: var(--ok); color: var(--ok); }
+  .badge.failed { border-color: var(--err); color: var(--err); }
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  main header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  main h2 { margin: 0; font-size: 16px; }
+  #detail { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #detail a { color: var(--accent); }
+  .tabs { display: flex; gap: 4px; margin-top: 10px; }
+  .tabs button { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+                 padding: 4px 12px; border-radius: 6px; cursor: pointer; }
+  .tabs button.on { border-color: var(--accent); color: var(--accent); }
+  #timeline, #log { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  #log { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; display: none; margin: 0; }
+  .entry { margin-bottom: 10px; max-width: 900px; }
+  .entry .time { color: var(--muted); font-size: 11px; }
+  .entry .body { white-space: pre-wrap; word-break: break-word; border-radius: 8px; padding: 8px 12px; }
+  .entry.user .body { background: var(--user); }
+  .entry.bot .body, .entry.assistant .body { background: var(--bot); }
+  .entry.tool .body, .entry.tool_error .body { padding: 2px 12px; color: var(--tool);
+                       font: 12px/1.45 ui-monospace, Menlo, monospace; }
+  .entry.tool_error .body { color: var(--err); }
+  .who { font-size: 11px; color: var(--muted); margin-right: 6px; }
+  .empty { color: var(--muted); padding: 40px 20px; }
+  .spinner { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
+             margin-right: 6px; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+</style>
+</head>
+<body>
+<aside>
+  <header><h1>chasage-bot</h1><div class="sub" id="summary">載入中…</div></header>
+  <div id="list"></div>
+</aside>
+<main>
+  <header>
+    <h2 id="title">選一個對話</h2>
+    <div id="detail"></div>
+    <div class="tabs">
+      <button id="tab-timeline" class="on">即時過程</button>
+      <button id="tab-log">完整 log</button>
+    </div>
+  </header>
+  <div id="timeline"><div class="empty">左邊選一個對話。即時過程只保留 bot 這次啟動後的內容，更早的請看「完整 log」。</div></div>
+  <pre id="log"></pre>
+</main>
+<script>
+const WHO = { user: "你", bot: "bot", assistant: "agent", tool: "工具", tool_error: "工具失敗" };
+let convs = [], selected = null, lastSeq = 0, tab = "timeline";
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+function renderList() {
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  for (const c of convs) {
+    const row = el("div", "conv" + (c.id === selected ? " selected" : ""));
+    row.onclick = () => select(c.id);
+    row.append(el("div", "title", `#${c.id} ${c.title || "（未命名）"}`));
+    const meta = el("div", "meta");
+    if (c.active) meta.append(el("span", "badge active", "目前"));
+    meta.append(el("span", "badge" + (c.status === "failed" ? " failed" : ""), c.status_label));
+    meta.append(el("span", "badge", c.mode));
+    if (c.turn) meta.append(el("span", "badge busy", `處理中（${c.turn}）`));
+    row.append(meta);
+    list.append(row);
+  }
+}
+
+function renderDetail() {
+  const c = convs.find(x => x.id === selected);
+  const title = document.getElementById("title"), detail = document.getElementById("detail");
+  if (!c) return;
+  title.replaceChildren();
+  if (c.turn) title.append(el("span", "spinner"));
+  title.append(`#${c.id} ${c.title || "（未命名）"}`);
+  detail.replaceChildren(`${c.status_label} · ${c.mode} 模式`);
+  if (c.turn) detail.append(` · agent 處理中（${c.turn}）`);
+  if (c.build_number) detail.append(` · build ${c.build_number}`);
+  for (const p of c.prs || []) {
+    detail.append(" · ");
+    const a = el("a", "", `${p.repo} PR #${p.number}`);
+    a.href = p.url; a.target = "_blank"; a.rel = "noopener";
+    detail.append(a);
+  }
+  if (c.error) detail.append(` · 錯誤：${c.error}`);
+}
+
+async function refreshList() {
+  try {
+    const data = await getJSON("/api/conversations");
+    convs = data.conversations;
+    const busy = convs.filter(c => c.turn).length;
+    document.getElementById("summary").textContent =
+      `${convs.length} 個對話 · ${busy ? busy + " 個處理中" : "閒置"} · 下一個 build ${data.next_build_number}`;
+    if (selected === null) {
+      const active = convs.find(c => c.active) || convs[0];
+      if (active) { select(active.id); return; }
+    }
+    renderList();
+    renderDetail();
+  } catch (e) {
+    document.getElementById("summary").textContent = "連不上 bot（" + e.message + "）";
+  }
+}
+
+async function refreshTimeline() {
+  if (selected === null) return;
+  const id = selected;
+  try {
+    const data = await getJSON(`/api/conversations/${id}/activity?since=${lastSeq}`);
+    if (id !== selected || !data.entries.length) return;
+    const box = document.getElementById("timeline");
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    if (lastSeq === 0) box.replaceChildren();
+    for (const e of data.entries) {
+      const row = el("div", "entry " + e.kind);
+      const time = el("div", "time");
+      time.append(el("span", "who", WHO[e.kind] || e.kind), new Date(e.time).toLocaleTimeString());
+      row.append(time, el("div", "body", e.text));
+      box.append(row);
+      lastSeq = e.seq;
+    }
+    if (atBottom || data.entries.length === box.children.length) box.scrollTop = box.scrollHeight;
+  } catch (e) { /* retried on next tick */ }
+}
+
+async function refreshLog() {
+  if (selected === null || tab !== "log") return;
+  try {
+    const r = await fetch(`/api/conversations/${selected}/log`, { cache: "no-store" });
+    const box = document.getElementById("log");
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.textContent = await r.text();
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  } catch (e) { /* retried on next tick */ }
+}
+
+function select(id) {
+  selected = id; lastSeq = 0;
+  const box = document.getElementById("timeline");
+  box.replaceChildren(el("div", "empty", "這個對話在 bot 這次啟動後還沒有活動。更早的內容請看「完整 log」。"));
+  renderList(); renderDetail(); refreshTimeline(); refreshLog();
+}
+
+function setTab(t) {
+  tab = t;
+  document.getElementById("tab-timeline").classList.toggle("on", t === "timeline");
+  document.getElementById("tab-log").classList.toggle("on", t === "log");
+  document.getElementById("timeline").style.display = t === "timeline" ? "block" : "none";
+  document.getElementById("log").style.display = t === "log" ? "block" : "none";
+  refreshLog();
+}
+document.getElementById("tab-timeline").onclick = () => setTab("timeline");
+document.getElementById("tab-log").onclick = () => setTab("log");
+
+refreshList();
+setInterval(refreshList, 3000);
+setInterval(refreshTimeline, 1500);
+setInterval(refreshLog, 3000);
+</script>
+</body>
+</html>

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/agent"
 	"github.com/LidoxLee/chasage-bot/internal/shell"
 	"github.com/LidoxLee/chasage-bot/internal/task"
@@ -54,9 +55,12 @@ func (b *Bot) runTurn(ctx context.Context, job turnJob) {
 	}
 	heads := b.heads(ctx, log, t)
 
+	b.Activity.Add(job.id, activity.KindUser, fmt.Sprintf("（%s）%s", job.mode, job.text))
 	ws := agent.Workspace{BackendDir: b.Cfg.Backend.Dir, AppDir: b.Cfg.App.Dir, Branch: t.Branch}
 	prompt := agent.TurnPrompt(ws, job.mode, t.SessionID == "", job.text)
-	res, runErr := b.Agent.Run(ctx, log, t.Dir, t.SessionID, job.mode, prompt)
+	res, runErr := b.Agent.Run(ctx, log, t.Dir, t.SessionID, job.mode, prompt, func(ev agent.Event) {
+		b.Activity.Add(job.id, ev.Kind, ev.Text)
+	})
 	if res.SessionID != "" {
 		if _, err := b.Store.Update(job.id, func(x *task.Task) error {
 			x.SessionID = res.SessionID

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/agent"
 	"github.com/LidoxLee/chasage-bot/internal/config"
 	"github.com/LidoxLee/chasage-bot/internal/gh"
@@ -53,7 +54,17 @@ func (f *fakeRunner) Run(_ context.Context, _ io.Writer, c shell.Cmd) (string, e
 			wt := filepath.Join(c.Dir, "chasage-backend")
 			f.heads[wt] = fmt.Sprintf("h%d", f.agentRuns)
 		}
-		return fmt.Sprintf(`{"type":"result","is_error":false,"result":"回覆 %d","session_id":"sess-1"}`, f.agentRuns), nil
+		lines := []string{
+			`{"type":"system","subtype":"init","session_id":"sess-1"}`,
+			`{"type":"tool_call","subtype":"started","tool_call":{"readToolCall":{"args":{"path":"lib/app/app.dart"}}}}`,
+			fmt.Sprintf(`{"type":"result","is_error":false,"result":"回覆 %d","session_id":"sess-1"}`, f.agentRuns),
+		}
+		if c.OnLine != nil {
+			for _, l := range lines {
+				c.OnLine(l)
+			}
+		}
+		return strings.Join(lines, "\n"), nil
 	case "gh":
 		return f.gh(c.Args)
 	case "make":
@@ -196,12 +207,13 @@ func newTestBot(t *testing.T, r *fakeRunner) (*Bot, *fakeNotifier) {
 	out := &fakeNotifier{}
 	git := gitx.Git{R: r}
 	b := New(Deps{
-		Cfg:   cfg,
-		Store: st,
-		Out:   out,
-		Git:   git,
-		GH:    gh.GH{R: r, Dir: cfg.Workdir, Poll: time.Millisecond, ChecksAppearTimeout: time.Millisecond},
-		Agent: agent.Agent{R: r, Bin: "agent"},
+		Activity: activity.New(100),
+		Cfg:      cfg,
+		Store:    st,
+		Out:      out,
+		Git:      git,
+		GH:       gh.GH{R: r, Dir: cfg.Workdir, Poll: time.Millisecond, ChecksAppearTimeout: time.Millisecond},
+		Agent:    agent.Agent{R: r, Bin: "agent"},
 		Release: release.Releaser{
 			R: r, Git: git, Slug: cfg.App.Slug, Base: "main",
 			Dir: filepath.Join(cfg.Workdir, "release", "chasage-app"),
@@ -256,6 +268,14 @@ func TestPlanGoMergeShip(t *testing.T) {
 	}
 	if !out.contains("回覆 1") {
 		t.Error("plan reply not sent")
+	}
+	var kinds []string
+	for _, e := range b.Activity.Since(conv.ID, 0) {
+		kinds = append(kinds, e.Kind+":"+e.Text)
+	}
+	want := []string{"bot:已開新對話 #1（plan 模式）。", "user:（plan）幫我規劃新用戶引導", "tool:read lib/app/app.dart", "bot:回覆 1"}
+	if !slices.Equal(kinds, want) {
+		t.Errorf("activity = %q, want %q", kinds, want)
 	}
 
 	b.goImplement(context.Background(), conv.ID)

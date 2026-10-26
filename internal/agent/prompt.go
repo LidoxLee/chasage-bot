@@ -33,7 +33,7 @@ func agentRules(ws Workspace) string {
 1. 遵守既有架構與風格，只改完成需求必要的 repo。
 2. 後端改動後在 %[1]s/ 執行 go vet ./... 與 go test ./...，必須通過。
 3. app 改動後在 %[2]s/ 執行 fvm flutter pub get、fvm dart run build_runner build --delete-conflicting-outputs、`+
-		`fvm flutter analyze lib/、fvm flutter test，必須通過。
+		`make format、make lint、fvm flutter test，必須通過。
 4. 資料庫 migration 放在後端既有的 migrations/ 慣例中，並確保向下相容（舊版 app 仍可運作）。
 5. 在各自的 worktree 內 commit，訊息使用 feat: / fix: / refactor: 前綴。不要 push，不要切換或修改 main。
 6. 不要修改 .github/workflows、部署設定、或任何密鑰檔案。

@@ -20,6 +20,9 @@ type Cmd struct {
 	Args []string
 	// Stdin, when non-empty, is fed to the process.
 	Stdin string
+	// OnLine, when set, receives each stdout line as it arrives, and stdout is then not copied to
+	// the log: the caller decides what to log (agent output can contain whole files).
+	OnLine func(line string)
 }
 
 // Runner executes commands. It exists so tests can substitute a fake.
@@ -50,10 +53,18 @@ func (Exec) Run(ctx context.Context, log io.Writer, c Cmd) (string, error) {
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = io.MultiWriter(&stdout, log)
+	var lines *lineWriter
+	if c.OnLine != nil {
+		lines = &lineWriter{fn: c.OnLine}
+		cmd.Stdout = io.MultiWriter(&stdout, lines)
+	}
 	cmd.Stderr = io.MultiWriter(&stderr, log)
 
 	fmt.Fprintf(log, "\n$ (%s) %s %s\n", c.Dir, c.Name, strings.Join(c.Args, " "))
 	err := cmd.Run()
+	if lines != nil {
+		lines.flush()
+	}
 	out := strings.TrimSpace(stdout.String())
 	if err != nil {
 		if ctx.Err() != nil {

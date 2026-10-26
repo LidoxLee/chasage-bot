@@ -50,6 +50,8 @@ type Config struct {
 	LogDir    string `yaml:"log_dir"`
 	// Path, when set, replaces PATH for every subprocess.
 	Path string `yaml:"path"`
+	// DashboardAddr is where the local web dashboard listens; "off" disables it.
+	DashboardAddr string `yaml:"dashboard_addr"`
 
 	Backend Repo `yaml:"backend"`
 	App     Repo `yaml:"app"`
@@ -127,6 +129,7 @@ func (c *Config) applyDefaults(home string) {
 	def(&c.App.Dir, "chasage-app")
 	def(&c.App.Base, "main")
 	def(&c.DeployWorkflow, "ecr.yml")
+	def(&c.DashboardAddr, "127.0.0.1:8787")
 	def(&c.Agent.Bin, "agent")
 	defDur(&c.ChecksTimeout, 30*time.Minute)
 	defDur(&c.DeployTimeout, 30*time.Minute)

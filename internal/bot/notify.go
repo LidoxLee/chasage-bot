@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/shell"
 	"github.com/LidoxLee/chasage-bot/internal/task"
 	"github.com/LidoxLee/chasage-bot/internal/telegram"
@@ -42,6 +43,7 @@ func (b *Bot) notify(ctx context.Context, text string) {
 
 // say sends a short message about a conversation and records it.
 func (b *Bot) say(ctx context.Context, id int, text string, buttons [][]telegram.Button) {
+	b.Activity.Add(id, activity.KindBot, text)
 	msgID, err := b.Out.Send(ctx, telegram.Truncate(text, telegram.MaxText), 0, buttons)
 	if err != nil {
 		slog.Error("send", "conv", id, "err", err)

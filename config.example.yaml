@@ -11,6 +11,7 @@ allowed_chat_id: 0
 # state_path: ~/Library/Application Support/chasage-bot/state.json
 # log_dir: ~/Library/Logs/chasage-bot
 # path: ""                                                 # 有填就取代子程序的 PATH
+# dashboard_addr: 127.0.0.1:8787                           # 本機網頁儀表板，填 off 關閉
 
 # backend:
 #   slug: LidoxLee/chasage-backend

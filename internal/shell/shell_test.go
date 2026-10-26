@@ -19,6 +19,27 @@ func TestExecRun(t *testing.T) {
 	}
 }
 
+func TestExecRunOnLine(t *testing.T) {
+	tail := NewTailWriter(nil, 1024)
+	var got []string
+	out, err := Exec{}.Run(context.Background(), tail, Cmd{
+		Name:   "sh",
+		Args:   []string{"-c", "echo one; echo two; printf three"},
+		OnLine: func(l string) { got = append(got, l) },
+	})
+	if err != nil || out != "one\ntwo\nthree" {
+		t.Fatalf("out=%q err=%v", out, err)
+	}
+	if strings.Join(got, ",") != "one,two,three" {
+		t.Errorf("lines = %q", got)
+	}
+	for _, l := range Lines(tail.Tail(10)) {
+		if l == "two" {
+			t.Error("stdout must not be copied to the log when OnLine is set")
+		}
+	}
+}
+
 func TestExecRunFailureIncludesStderr(t *testing.T) {
 	_, err := Exec{}.Run(context.Background(), nil, Cmd{Name: "sh", Args: []string{"-c", "echo boom >&2; exit 3"}})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
