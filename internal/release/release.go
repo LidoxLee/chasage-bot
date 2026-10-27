@@ -43,7 +43,7 @@ func (r Releaser) Build(ctx context.Context, log io.Writer, buildNumber int) (st
 		{Name: "fvm", Args: []string{"install"}},
 		{Name: "fvm", Args: []string{"flutter", "pub", "get"}},
 		{Name: "fvm", Args: []string{"dart", "run", "build_runner", "build", "--delete-conflicting-outputs"}},
-		{Name: "make", Args: []string{"build-ipa", "BUILD_NUMBER=" + strconv.Itoa(buildNumber)}},
+		{Name: "make", Args: []string{"build-ipa", "BUILD_NUMBER=" + strconv.Itoa(buildNumber)}, Env: r.ascEnv()},
 	}
 	for _, c := range steps {
 		c.Dir = r.Dir
@@ -60,9 +60,15 @@ func (r Releaser) Upload(ctx context.Context, log io.Writer, ipa string) error {
 		Dir:  r.Dir,
 		Name: "make",
 		Args: []string{"upload-testflight", "IPA=" + ipa},
-		Env:  []string{"ASC_KEY_ID=" + r.ASCKeyID, "ASC_ISSUER_ID=" + r.ASCIssuerID},
+		Env:  r.ascEnv(),
 	})
 	return err
+}
+
+// ascEnv lets build-ipa sign and upload-testflight upload with the App Store
+// Connect API key instead of an Xcode Apple ID login.
+func (r Releaser) ascEnv() []string {
+	return []string{"ASC_KEY_ID=" + r.ASCKeyID, "ASC_ISSUER_ID=" + r.ASCIssuerID}
 }
 
 func newestIPA(dir string) (string, error) {
