@@ -40,8 +40,16 @@ type Deps struct {
 	GH      gh.GH
 	Agent   agent.Agent
 	Release release.Releaser
+	// Builds, when set, reports the highest build number on App Store Connect so
+	// uploads made outside the bot do not cause duplicate build numbers.
+	Builds BuildLister
 	// Activity, when set, receives each conversation's timeline for the dashboard.
 	Activity *activity.Hub
+}
+
+// BuildLister reports the highest build number already uploaded.
+type BuildLister interface {
+	LatestBuildNumber(ctx context.Context) (int, error)
 }
 
 // turnJob is one user message for the agent.

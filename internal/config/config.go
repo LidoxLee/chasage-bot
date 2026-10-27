@@ -34,6 +34,7 @@ type Agent struct {
 type Release struct {
 	ASCKeyID         string        `yaml:"asc_key_id"`
 	ASCIssuerID      string        `yaml:"asc_issuer_id"`
+	BundleID         string        `yaml:"bundle_id"`
 	BuildNumberStart int           `yaml:"build_number_start"`
 	Timeout          time.Duration `yaml:"timeout"`
 }
@@ -99,13 +100,23 @@ func ascKeyDirs(home string) []string {
 	return dirs
 }
 
-func ascKeyExists(home, keyID string) bool {
+func ascKeyPath(home, keyID string) string {
 	for _, d := range ascKeyDirs(home) {
-		if _, err := os.Stat(filepath.Join(d, "AuthKey_"+keyID+".p8")); err == nil {
-			return true
+		p := filepath.Join(d, "AuthKey_"+keyID+".p8")
+		if _, err := os.Stat(p); err == nil {
+			return p
 		}
 	}
-	return false
+	return ""
+}
+
+// ASCKeyPath returns the AuthKey_<asc_key_id>.p8 path, or "" when it is missing.
+func (c *Config) ASCKeyPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || c.Release.ASCKeyID == "" {
+		return ""
+	}
+	return ascKeyPath(home, c.Release.ASCKeyID)
 }
 
 func (c *Config) applyDefaults(home string) {
@@ -129,6 +140,7 @@ func (c *Config) applyDefaults(home string) {
 	def(&c.App.Dir, "chasage-app")
 	def(&c.App.Base, "main")
 	def(&c.DeployWorkflow, "ecr.yml")
+	def(&c.Release.BundleID, "com.chasage.app")
 	def(&c.DashboardAddr, "127.0.0.1:8787")
 	def(&c.Agent.Bin, "agent")
 	defDur(&c.ChecksTimeout, 30*time.Minute)
@@ -156,7 +168,7 @@ func (c *Config) validate(home string) error {
 	}
 	if c.Release.ASCKeyID == "" || c.Release.ASCIssuerID == "" {
 		errs = append(errs, errors.New("release.asc_key_id and release.asc_issuer_id are required"))
-	} else if !ascKeyExists(home, c.Release.ASCKeyID) {
+	} else if ascKeyPath(home, c.Release.ASCKeyID) == "" {
 		errs = append(errs, fmt.Errorf("release.asc_key_id: AuthKey_%s.p8 not found in %s",
 			c.Release.ASCKeyID, strings.Join(ascKeyDirs(home), ", ")))
 	}

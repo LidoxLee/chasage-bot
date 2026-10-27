@@ -117,7 +117,7 @@ func (b *Bot) ensureMerged(ctx context.Context, log io.Writer, id int, p task.PR
 
 // buildAndUpload releases the current app main to TestFlight and returns the build number used.
 func (b *Bot) buildAndUpload(ctx context.Context, log io.Writer, id int) (int, error) {
-	n := b.Store.BuildNumber()
+	n := b.nextBuildNumber(ctx, log)
 	if err := b.setStatus(id, task.Building); err != nil {
 		return 0, err
 	}
@@ -138,12 +138,35 @@ func (b *Bot) buildAndUpload(ctx context.Context, log io.Writer, id int) (int, e
 	return n, b.Store.AdvanceBuildNumber(n)
 }
 
+// nextBuildNumber is the stored next build number, moved past the highest build
+// on App Store Connect. A failed lookup falls back to the stored number.
+func (b *Bot) nextBuildNumber(ctx context.Context, log io.Writer) int {
+	n := b.Store.BuildNumber()
+	if b.Builds == nil {
+		return n
+	}
+	latest, err := b.Builds.LatestBuildNumber(ctx)
+	if err != nil {
+		slog.Warn("App Store Connect build lookup", "err", err)
+		fmt.Fprintf(log, "查詢 App Store Connect 的 build number 失敗，沿用 build %d：%v\n", n, err)
+		return n
+	}
+	if latest < n {
+		return n
+	}
+	fmt.Fprintf(log, "App Store Connect 已有 build %d，改用 build %d\n", latest, latest+1)
+	if err := b.Store.SetBuildNumber(latest + 1); err != nil {
+		slog.Error("set build number", "err", err)
+	}
+	return latest + 1
+}
+
 // manualRelease builds and uploads app main without a task (the /release command).
 func (b *Bot) manualRelease(ctx context.Context) {
 	name := fmt.Sprintf("release-%s.log", time.Now().Format("20060102-150405"))
 	log, closeLog := b.openLog(name)
 	defer closeLog()
-	n := b.Store.BuildNumber()
+	n := b.nextBuildNumber(ctx, log)
 	b.notify(ctx, fmt.Sprintf("手動發版：開始打包 iOS（build %d）…", n))
 	rctx, cancel := context.WithTimeout(ctx, b.Cfg.Release.Timeout)
 	defer cancel()

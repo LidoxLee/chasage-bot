@@ -36,6 +36,7 @@ agent:
 release:
   asc_key_id: "XXXXXXXXXX"
   asc_issuer_id: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  # 下一次上傳用的 build number。必須大於 App Store Connect 上已有的最大值（pubspec 目前是 +2）。
+  bundle_id: "com.chasage.app"  # 發版前用這個 bundle id 查 App Store Connect 上最大的 build number
+  # 下一次上傳用的 build number。發版前若 App Store Connect 已有更大的值，會自動跳到它 +1。
   build_number_start: 3
   timeout: 60m

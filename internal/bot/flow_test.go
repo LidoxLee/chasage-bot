@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -437,5 +438,42 @@ func TestRecoverClearsInterruptedTurn(t *testing.T) {
 	}
 	if !out.contains("請重新傳送") {
 		t.Errorf("messages = %v", out.msgs)
+	}
+}
+
+type fakeBuilds struct {
+	latest int
+	err    error
+}
+
+func (f fakeBuilds) LatestBuildNumber(context.Context) (int, error) { return f.latest, f.err }
+
+func TestManualReleaseSkipsPastAppStoreConnectBuilds(t *testing.T) {
+	cases := []struct {
+		name      string
+		builds    fakeBuilds
+		used      int
+		nextAfter int
+	}{
+		{"behind App Store Connect", fakeBuilds{latest: 11}, 12, 13},
+		{"ahead of App Store Connect", fakeBuilds{latest: 1}, 3, 4},
+		{"lookup fails", fakeBuilds{err: errors.New("offline")}, 3, 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newFakeRunner()
+			b, out := newTestBot(t, r)
+			b.Builds = tc.builds
+			b.manualRelease(context.Background())
+			if r.count(fmt.Sprintf("make build-ipa BUILD_NUMBER=%d", tc.used)) != 1 {
+				t.Fatalf("calls = %v", r.calls)
+			}
+			if got := b.Store.BuildNumber(); got != tc.nextAfter {
+				t.Fatalf("next build number = %d, want %d", got, tc.nextAfter)
+			}
+			if !out.contains(fmt.Sprintf("build %d 已上傳", tc.used)) {
+				t.Errorf("messages = %v", out.msgs)
+			}
+		})
 	}
 }

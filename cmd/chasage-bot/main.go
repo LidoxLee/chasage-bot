@@ -15,6 +15,7 @@ import (
 
 	"github.com/LidoxLee/chasage-bot/internal/activity"
 	"github.com/LidoxLee/chasage-bot/internal/agent"
+	"github.com/LidoxLee/chasage-bot/internal/asc"
 	"github.com/LidoxLee/chasage-bot/internal/bot"
 	"github.com/LidoxLee/chasage-bot/internal/config"
 	"github.com/LidoxLee/chasage-bot/internal/gh"
@@ -90,6 +91,12 @@ func run(cfgPath string) error {
 			Base:        cfg.App.Base,
 			ASCKeyID:    cfg.Release.ASCKeyID,
 			ASCIssuerID: cfg.Release.ASCIssuerID,
+		},
+		Builds: asc.Client{
+			KeyID:    cfg.Release.ASCKeyID,
+			IssuerID: cfg.Release.ASCIssuerID,
+			KeyPath:  cfg.ASCKeyPath(),
+			BundleID: cfg.Release.BundleID,
 		},
 	})
 	slog.Info("chasage-bot started", "config", cfgPath, "workdir", cfg.Workdir, "setup_mode", cfg.AllowedChatID == 0,
